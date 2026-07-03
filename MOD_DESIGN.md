@@ -15,15 +15,29 @@ versioning). Tiny mod = survives game/SML updates with minimal fixes.
 game (mod UI)  ->  127.0.0.1:8770 (desktop app)  ->  Cloudflare  ->  R2
 ```
 
-## In-game UX
-- A keybind (default **F6**) toggles a FOMPS panel (UMG widget); optionally also
-  an entry in the pause menu.
-- Panel (data from `GET /api/state`):
-  - each world: name, **share code** (copy), version, host status (free / "X hosting")
-  - per world: **Take Host** (`POST /api/host`), **Finish & Upload** (`POST /api/finish`)
-  - **Create** / **Join by code** (`POST /api/create` / `/api/join`)
-  - a status line for results and errors
-- **Open FOMPS app** button → focuses the desktop UI for anything advanced.
+## In-game UX (mirrors MPSync — verified from its official tutorial video)
+MPSync's actual UI: an **"MPSync" entry in the game's main/pause menu** opens a
+panel showing the **current synced game**, a **Private / Friends Only** dropdown,
+and a **Game ID** that's *hidden by default* with **Show Game ID** + **Copy to
+clipboard** buttons. Friends use that ID to download the cloud save, then Host it
+from their normal game list. It **auto-uploads the save on save** while hosting.
+
+**FOMPS mirror:**
+- A **"FOMPS" entry in the main/pause menu** (SML menu injection) + optional **F6** hotkey.
+- Panel (data from the local app `GET /api/state`):
+  - current world name + **share code**, hidden by default with **Show** + **Copy**
+    (exactly like MPSync's Game ID)
+  - session status: *free* / *"X hosting"*
+  - **Auto mode toggle (default ON)** — the key UX:
+    - on **Host / click Play**: auto **pull latest + claim lock** (`/api/host`)
+    - on **save / exit**: auto **push + release** (`/api/finish`) — like MPSync's upload-on-save
+  - manual buttons shown only when Auto is off: *Take Host* / *Finish & Upload* / *Create* / *Join by code*
+  - **Open FOMPS app** for anything advanced
+
+## Auto mode (the "just click Play" experience)
+The share code links the group **once** (saved in config); after that it's
+invisible. Auto mode hooks the game's host + save events so the player just plays
+normally and sync happens around the session — no per-session code juggling.
 
 ## Requirements
 - The desktop app must be running (auto-start with Windows, or the mod launches

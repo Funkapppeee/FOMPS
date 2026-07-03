@@ -123,6 +123,7 @@
 <script>
 const $ = s => document.querySelector(s);
 let T;
+const seenEvents = new Set();
 function toast(msg, bad){ const t=$('#toast'); t.textContent=msg; t.className='show'+(bad?' bad':'');
   clearTimeout(T); T=setTimeout(()=>t.className='',3200); }
 async function api(path, body){
@@ -146,6 +147,7 @@ function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>
 
 async function load(){
   const s = await api('/api/state');
+  if(s.events) s.events.forEach(e=>{ const k=e.t+e.msg; if(!seenEvents.has(k)){ seenEvents.add(k); logLine('[auto] '+e.msg,'ok'); } });
   $('#user').value = s.user||''; $('#server').value = s.server||'';
   // worlds
   const wrap = $('#worlds');

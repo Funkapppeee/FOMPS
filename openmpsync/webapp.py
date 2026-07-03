@@ -7,7 +7,7 @@ to the (remote, self-hostable) sync server. Run:  python -m openmpsync.webapp
 
 GPL-3.0.
 """
-import os, sys, webbrowser, threading
+import os, sys, time, webbrowser, threading
 from flask import Flask, request, jsonify, send_from_directory
 from . import store, remote, saveinfo, locate
 
@@ -26,6 +26,58 @@ def _cfg():
 
 def _err(msg, code=400):
     return jsonify(error=msg), code
+
+
+# --- AUTO MODE: watch linked worlds' local saves, auto-upload when you save ---
+_auto_last = {}   # ref -> mtime of the newest save we've already handled
+_events = []      # recent auto-mode events, surfaced in the UI console
+
+
+def _log(msg):
+    _events.append({"t": time.strftime("%H:%M:%S"), "msg": msg})
+    del _events[:-40]
+
+
+def _auto_tick():
+    """One pass: for each auto-enabled world, if a NEW save appeared and has
+    settled (game finished writing), upload it."""
+    c = _cfg()
+    changed = False
+    for ref, w in c["worlds"].items():
+        if not w.get("auto", True):
+            continue
+        ldir, session = w.get("local_dir"), w.get("session")
+        if not ldir or not session:
+            continue
+        latest = store.latest_local_save(ldir, session)
+        if not latest:
+            continue
+        mt = os.path.getmtime(latest)
+        if ref not in _auto_last:
+            _auto_last[ref] = mt          # baseline: ignore the pre-existing save
+            continue
+        if mt <= _auto_last[ref] or (time.time() - mt) < 8:
+            continue                       # unchanged, or still being written
+        _auto_last[ref] = mt
+        try:
+            ver = remote.RemoteWorld(w["server"], w["code"]).push(
+                latest, c.get("user") or "anon", w.get("base_version", 0))
+            w["base_version"] = ver
+            changed = True
+            _log(f"Auto-uploaded '{ref}' as v{ver} (you saved)")
+        except remote.RemoteError as e:
+            _log(f"Auto-upload skipped for '{ref}': {e}")
+    if changed:
+        store.save_config(c)
+
+
+def _auto_loop():
+    while True:
+        try:
+            _auto_tick()
+        except Exception:
+            pass
+        time.sleep(15)
 
 
 @app.get("/")
@@ -50,7 +102,7 @@ def state():
     saves = [{"session": s.session_name, "play": s.play_hms, "file": os.path.basename(s.path)}
              for s in saveinfo.find_local_saves()[:25] if s.session_name]
     return jsonify({"user": c.get("user", ""), "server": c.get("server", ""),
-                    "worlds": worlds, "saves": saves})
+                    "worlds": worlds, "saves": saves, "events": _events[-15:]})
 
 
 @app.post("/api/settings")
@@ -141,6 +193,7 @@ def forget():
 
 
 def run(port=8770, open_browser=True):
+    threading.Thread(target=_auto_loop, daemon=True).start()   # auto-mode watcher
     if open_browser:
         threading.Timer(0.8, lambda: webbrowser.open(f"http://127.0.0.1:{port}")).start()
     app.run(host="127.0.0.1", port=port)
