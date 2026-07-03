@@ -185,6 +185,31 @@ def finish():
     return jsonify(ok=True, version=ver)
 
 
+@app.post("/api/sync-down")
+def sync_down():
+    """Pull the latest save for each linked world IF the cloud is newer than our
+    local copy (so hosting always hosts the newest; never clobbers unpushed work).
+    Called by the in-game mod on startup = pull-on-host."""
+    c = _cfg(); pulled = []
+    for ref, w in c.get("worlds", {}).items():
+        if not w.get("auto", True) or not w.get("local_dir") or not w.get("session"):
+            continue
+        try:
+            rw = remote.RemoteWorld(w["server"], w["code"])
+            st = rw.status()
+            if st["current_version"] > w.get("base_version", 0):
+                ver, dst = rw.pull(w["local_dir"], w["session"])
+                w["base_version"] = ver
+                _auto_last[ref] = os.path.getmtime(dst)   # don't let the watcher re-push what we just pulled
+                pulled.append({"ref": ref, "version": ver})
+                _log(f"Auto-pulled '{ref}' to v{ver} (newer version was available)")
+        except remote.RemoteError:
+            pass
+    if pulled:
+        store.save_config(c)
+    return jsonify(ok=True, pulled=pulled)
+
+
 @app.post("/api/forget")
 def forget():
     c = _cfg(); c["worlds"].pop(request.get_json(force=True).get("ref"), None)
