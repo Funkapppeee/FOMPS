@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+# local config / server data
+server/data/
+*.sav
+# Cloudflare Worker
+worker/node_modules/
+worker/.wrangler/
+worker/dev.log
+# OS
+Thumbs.db
+.DS_Store
+
+# PyInstaller build
+build/
+dist/
+*.spec

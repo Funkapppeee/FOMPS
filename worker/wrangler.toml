@@ -1,0 +1,12 @@
+name = "openmpsync"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+# R2 bucket that holds saves + manifests (create it once with:
+#   wrangler r2 bucket create openmpsync )
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "openmpsync"
+
+[vars]
+KEEP = "10"   # backups kept per world

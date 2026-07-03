@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FOMPS</title>
+<style>
+  :root{
+    --bg:#16181c; --panel:#20242b; --panel2:#272c34; --line:#2f3540;
+    --text:#e6e8ec; --muted:#8b93a1; --accent:#f5a623; --accent2:#ffbe4d;
+    --green:#5fbf7f; --red:#e06b6b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:14px/1.5 "Segoe UI",system-ui,sans-serif}
+  header{padding:22px 28px 10px}
+  h1{margin:0;font-size:26px;letter-spacing:.5px}
+  h1 b{color:var(--accent)}
+  .sub{color:var(--muted);margin-top:2px}
+  main{max-width:860px;margin:0 auto;padding:0 24px 60px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:16px 18px;margin:16px 0}
+  .card h2{margin:0 0 12px;font-size:13px;text-transform:uppercase;
+    letter-spacing:1px;color:var(--muted)}
+  label{display:block;font-size:12px;color:var(--muted);margin:0 0 4px}
+  input{width:100%;padding:9px 11px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:8px;color:var(--text);font-size:14px}
+  input:focus{outline:none;border-color:var(--accent)}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .row>div{flex:1;min-width:160px}
+  button{border:1px solid var(--line);background:var(--panel2);color:var(--text);
+    padding:9px 14px;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);color:#181818;border-color:var(--accent)}
+  button.primary:hover{background:var(--accent2)}
+  button.ghost{background:transparent}
+  .world{background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+    padding:14px 16px;margin:10px 0}
+  .world .top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .world .name{font-size:17px;font-weight:700}
+  .world .meta{color:var(--muted);font-size:12px;margin-top:2px}
+  .code{font-family:Consolas,monospace;font-size:16px;letter-spacing:2px;color:var(--accent);
+    background:#141821;border:1px dashed var(--line);border-radius:8px;padding:6px 12px;cursor:pointer}
+  .pill{font-size:12px;padding:2px 9px;border-radius:20px}
+  .pill.free{background:rgba(95,191,127,.15);color:var(--green)}
+  .pill.busy{background:rgba(224,107,107,.15);color:var(--red)}
+  .pill.err{background:rgba(224,107,107,.12);color:var(--red)}
+  .actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .muted{color:var(--muted)} .hidden{display:none}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  td{padding:5px 6px;border-bottom:1px solid var(--line)}
+  td.s{color:var(--accent);font-weight:600}
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);
+    background:#0d0f13;border:1px solid var(--line);border-left:3px solid var(--accent);
+    padding:11px 16px;border-radius:8px;opacity:0;transition:.25s;pointer-events:none;max-width:80%}
+  #toast.show{opacity:1}
+  #toast.bad{border-left-color:var(--red)}
+</style>
+</head>
+<body>
+<header>
+  <h1><b>FOMPS</b></h1>
+  <div class="sub">Funk's OpenMPSync — share a Satisfactory world with friends. No dedicated server, no sign-in, no port forwarding.</div>
+</header>
+<main>
+
+  <div class="card">
+    <h2>You</h2>
+    <div class="row">
+      <div><label>Your name</label><input id="user" placeholder="e.g. Funk"></div>
+      <div style="flex:2"><label>Sync server URL</label><input id="server" placeholder="https://sync.example.com"></div>
+      <div style="flex:0 0 auto;align-self:flex-end"><button class="primary" onclick="saveSettings()">Save</button></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Your worlds</h2>
+    <div id="worlds"><div class="muted">No worlds yet — create one or join with a code below.</div></div>
+    <div class="row" style="margin-top:14px">
+      <div><label>New world — a name for you</label><input id="cref" placeholder="nuts"></div>
+      <div><label>In-game session name</label><input id="csession" placeholder="Nuts"></div>
+      <div style="flex:0 0 auto;align-self:flex-end"><button class="primary" onclick="createWorld()">Create + get code</button></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div><label>Join — a name for you</label><input id="jref" placeholder="nuts"></div>
+      <div><label>Share code from a friend</label><input id="jcode" placeholder="ABCD2345" style="text-transform:uppercase"></div>
+      <div style="flex:0 0 auto;align-self:flex-end"><button onclick="joinWorld()">Join by code</button></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Local saves detected</h2>
+    <table id="saves"><tr><td class="muted">scanning…</td></tr></table>
+  </div>
+
+</main>
+<div id="toast"></div>
+
+<button id="consoleBtn" onclick="toggleConsole()" title="Show activity console">▤ Console</button>
+<div id="console" class="hidden">
+  <div class="chead"><span>Console — FOMPS activity</span>
+    <span><button class="mini" onclick="clearConsole()">Clear</button>
+    <button class="mini" onclick="toggleConsole()">Hide ✕</button></span></div>
+  <div id="consoleBody"></div>
+</div>
+<style>
+  #consoleBtn{position:fixed;right:18px;bottom:16px;z-index:20;background:var(--panel2);
+    border:1px solid var(--accent);color:var(--accent);border-radius:20px;padding:8px 16px;font-weight:600;cursor:pointer}
+  #consoleBtn:hover{background:var(--accent);color:var(--bg)}
+  #console{position:fixed;right:18px;bottom:60px;width:520px;max-width:92vw;height:300px;z-index:20;
+    background:#0c0e12;border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;
+    box-shadow:0 10px 34px rgba(0,0,0,.55)}
+  #console.hidden{display:none}
+  .chead{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;
+    border-bottom:1px solid var(--line);color:var(--muted);font-size:12px}
+  .mini{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:6px;
+    padding:2px 8px;font-size:11px;cursor:pointer;margin-left:6px}
+  .mini:hover{border-color:var(--accent);color:var(--accent)}
+  #consoleBody{flex:1;overflow:auto;padding:8px 12px;font:12px/1.55 Consolas,monospace;color:#cdd3dc}
+  #consoleBody .ok{color:var(--green)} #consoleBody .err{color:var(--red)}
+</style>
+
+<script>
+const $ = s => document.querySelector(s);
+let T;
+function toast(msg, bad){ const t=$('#toast'); t.textContent=msg; t.className='show'+(bad?' bad':'');
+  clearTimeout(T); T=setTimeout(()=>t.className='',3200); }
+async function api(path, body){
+  const method = body?'POST':'GET';
+  if(path!=='/api/state') logLine((method==='POST'?'▶ ':'· ')+method+' '+path+(body?'  '+JSON.stringify(body):''));
+  const r = await fetch(path, body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok){ const m=j.error||('HTTP '+r.status); if(path!=='/api/state') logLine('  ✗ '+m,'err'); throw new Error(m); }
+  if(path!=='/api/state') logLine('  ✓ '+JSON.stringify(j).slice(0,160),'ok');
+  return j;
+}
+function logLine(msg, cls){ const c=$('#consoleBody'); if(!c) return;
+  const t=new Date().toTimeString().slice(0,8);
+  c.insertAdjacentHTML('beforeend','<div class="'+(cls||'')+'">['+t+'] '+esc(msg)+'</div>');
+  while(c.childElementCount>300) c.removeChild(c.firstChild);
+  c.scrollTop=c.scrollHeight; }
+function toggleConsole(){ const p=$('#console'); p.classList.toggle('hidden');
+  if(!p.classList.contains('hidden')){ const b=$('#consoleBody'); b.scrollTop=b.scrollHeight; } }
+function clearConsole(){ $('#consoleBody').innerHTML=''; }
+function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+async function load(){
+  const s = await api('/api/state');
+  $('#user').value = s.user||''; $('#server').value = s.server||'';
+  // worlds
+  const wrap = $('#worlds');
+  if(!s.worlds.length){ wrap.innerHTML='<div class="muted">No worlds yet — create one or join with a code below.</div>'; }
+  else wrap.innerHTML = s.worlds.map(w=>{
+    let pill = w.error ? `<span class="pill err">server unreachable</span>`
+      : (w.lock ? `<span class="pill busy">${esc(w.lock.holder)} hosting</span>` : `<span class="pill free">free to host</span>`);
+    let ver = w.error ? '' : ` · v${w.version}`;
+    return `<div class="world">
+      <div class="top">
+        <div><div class="name">${esc(w.ref)} ${pill}</div>
+          <div class="meta">session “${esc(w.session)}”${ver}</div></div>
+        <div class="code" title="click to copy" onclick="copyCode('${esc(w.code)}')">${esc(w.code)}</div>
+      </div>
+      <div class="actions">
+        <button class="primary" onclick="act('host','${esc(w.ref)}')">Pull &amp; Host</button>
+        <button onclick="act('finish','${esc(w.ref)}')">Finish &amp; Upload</button>
+        <button class="ghost" onclick="copyCode('${esc(w.code)}')">Copy code</button>
+        <button class="ghost" onclick="forget('${esc(w.ref)}')">Forget</button>
+      </div></div>`;
+  }).join('');
+  // saves
+  $('#saves').innerHTML = s.saves.length
+    ? s.saves.map(v=>`<tr><td class="s">${esc(v.session)}</td><td>${esc(v.play)}</td><td class="muted">${esc(v.file)}</td></tr>`).join('')
+    : '<tr><td class="muted">No Satisfactory saves found.</td></tr>';
+}
+async function saveSettings(){ try{ await api('/api/settings',{user:$('#user').value,server:$('#server').value}); toast('Saved.'); load(); }catch(e){ toast(e.message,true); } }
+async function createWorld(){ try{ const r=await api('/api/create',{ref:$('#cref').value,session:$('#csession').value});
+  $('#cref').value='';$('#csession').value=''; toast('World created — code '+r.code+' copied!'); copyCode(r.code,true); load(); }catch(e){ toast(e.message,true); } }
+async function joinWorld(){ try{ await api('/api/join',{ref:$('#jref').value,code:$('#jcode').value});
+  $('#jref').value='';$('#jcode').value=''; toast('Joined!'); load(); }catch(e){ toast(e.message,true); } }
+async function act(kind,ref){ try{ const r=await api('/api/'+kind,{ref});
+  toast(kind==='host'?('Hosting v'+r.version+' — start a friends-only game, then Finish.'):('Uploaded v'+r.version+' — lock released.')); load(); }catch(e){ toast(e.message,true); } }
+async function forget(ref){ try{ await api('/api/forget',{ref}); toast('Removed.'); load(); }catch(e){ toast(e.message,true); } }
+function copyCode(c,quiet){ navigator.clipboard.writeText(c).then(()=>{ if(!quiet) toast('Code '+c+' copied.'); }); }
+
+logLine('FOMPS ready. Click Console to watch activity.');
+load(); setInterval(load, 8000);
+</script>
+</body>
+</html>

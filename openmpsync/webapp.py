@@ -1,0 +1,150 @@
+"""
+webapp.py - local companion web UI for Funk's OpenMPSync.
+
+Serves a clean page on 127.0.0.1 that detects your saves and drives the
+share-code host-swap flow. Same shape as MPSync / FMCSL: a local page talking
+to the (remote, self-hostable) sync server. Run:  python -m openmpsync.webapp
+
+GPL-3.0.
+"""
+import os, sys, webbrowser, threading
+from flask import Flask, request, jsonify, send_from_directory
+from . import store, remote, saveinfo, locate
+
+WEB = os.path.join(os.path.dirname(__file__), "web")
+if not os.path.isdir(WEB) and hasattr(sys, "_MEIPASS"):   # PyInstaller onefile
+    WEB = os.path.join(sys._MEIPASS, "openmpsync", "web")
+app = Flask(__name__, static_folder=None)
+
+
+def _cfg():
+    c = store.load_config()
+    c.setdefault("worlds", {})
+    c.setdefault("server", store.DEFAULT_SERVER)
+    return c
+
+
+def _err(msg, code=400):
+    return jsonify(error=msg), code
+
+
+@app.get("/")
+def index():
+    return send_from_directory(WEB, "index.html")
+
+
+@app.get("/api/state")
+def state():
+    c = _cfg()
+    worlds = []
+    for ref, w in c["worlds"].items():
+        item = {"ref": ref, "code": w.get("code"), "session": w.get("session"),
+                "server": w.get("server"), "base_version": w.get("base_version", 0)}
+        try:
+            st = remote.RemoteWorld(w["server"], w["code"]).status()
+            item["version"] = st["current_version"]
+            item["lock"] = st.get("lock")
+        except Exception as e:  # server down / bad code - show but don't crash
+            item["error"] = str(e)
+        worlds.append(item)
+    saves = [{"session": s.session_name, "play": s.play_hms, "file": os.path.basename(s.path)}
+             for s in saveinfo.find_local_saves()[:25] if s.session_name]
+    return jsonify({"user": c.get("user", ""), "server": c.get("server", ""),
+                    "worlds": worlds, "saves": saves})
+
+
+@app.post("/api/settings")
+def settings():
+    c = _cfg(); d = request.get_json(force=True)
+    if "user" in d:
+        c["user"] = (d["user"] or "").strip()
+    if "server" in d:
+        c["server"] = (d["server"] or "").strip().rstrip("/")
+    store.save_config(c)
+    return jsonify(ok=True)
+
+
+@app.post("/api/create")
+def create():
+    c = _cfg(); d = request.get_json(force=True)
+    server = (d.get("server") or c["server"]).rstrip("/")
+    ref = (d.get("ref") or "").strip(); session = (d.get("session") or "").strip()
+    if not server:
+        return _err("Set a server URL first (Settings).")
+    if not ref or not session:
+        return _err("Both a name and the in-game session name are required.")
+    try:
+        rw = remote.RemoteWorld.create(server, session)
+    except remote.RemoteError as e:
+        return _err(str(e), 502)
+    c["worlds"][ref] = {"code": rw.code, "server": server, "session": session,
+                        "local_dir": locate.primary_save_dir(), "base_version": 0}
+    store.save_config(c)
+    return jsonify(ok=True, code=rw.code)
+
+
+@app.post("/api/join")
+def join():
+    c = _cfg(); d = request.get_json(force=True)
+    server = (d.get("server") or c["server"]).rstrip("/")
+    ref = (d.get("ref") or "").strip(); code = (d.get("code") or "").strip().upper()
+    if not server:
+        return _err("Set a server URL first (Settings).")
+    if not ref or not code:
+        return _err("A name and a share code are required.")
+    try:
+        st = remote.RemoteWorld(server, code).status()
+    except remote.RemoteError as e:
+        return _err(str(e), 502)
+    c["worlds"][ref] = {"code": code, "server": server, "session": st.get("session") or "World",
+                        "local_dir": locate.primary_save_dir(), "base_version": st.get("current_version", 0)}
+    store.save_config(c)
+    return jsonify(ok=True)
+
+
+@app.post("/api/host")
+def host():
+    c = _cfg(); w = c["worlds"].get(request.get_json(force=True).get("ref"))
+    if not w:
+        return _err("Unknown world.")
+    rw = remote.RemoteWorld(w["server"], w["code"])
+    try:
+        rw.claim(c.get("user") or "anon")
+    except remote.RemoteError as e:
+        return _err(str(e), 409)
+    ver, dst = rw.pull(w["local_dir"], w["session"])
+    w["base_version"] = ver; store.save_config(c)
+    return jsonify(ok=True, version=ver, path=dst)
+
+
+@app.post("/api/finish")
+def finish():
+    c = _cfg(); w = c["worlds"].get(request.get_json(force=True).get("ref"))
+    if not w:
+        return _err("Unknown world.")
+    local = store.latest_local_save(w["local_dir"], w["session"])
+    if not local:
+        return _err(f"No '{w['session']}' save found in your SaveGames to upload.")
+    try:
+        ver = remote.RemoteWorld(w["server"], w["code"]).push(local, c.get("user") or "anon", w.get("base_version", 0))
+    except remote.RemoteError as e:
+        return _err(str(e), 409)
+    w["base_version"] = ver; store.save_config(c)
+    return jsonify(ok=True, version=ver)
+
+
+@app.post("/api/forget")
+def forget():
+    c = _cfg(); c["worlds"].pop(request.get_json(force=True).get("ref"), None)
+    store.save_config(c)
+    return jsonify(ok=True)
+
+
+def run(port=8770, open_browser=True):
+    if open_browser:
+        threading.Timer(0.8, lambda: webbrowser.open(f"http://127.0.0.1:{port}")).start()
+    app.run(host="127.0.0.1", port=port)
+
+
+if __name__ == "__main__":
+    run()

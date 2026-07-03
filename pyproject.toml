@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "funks-openmpsync"
+version = "0.1.0.dev0"
+description = "Free, open-source Satisfactory multiplayer save host-swapping (the open successor to MPSync)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "Funk" }]
+keywords = ["satisfactory", "multiplayer", "save", "sync", "mpsync", "coop"]
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Games/Entertainment",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/"          # set on publish
+Source = "https://github.com/"
+
+[tool.setuptools]
+packages = ["openmpsync"]
