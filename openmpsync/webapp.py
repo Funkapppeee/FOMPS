@@ -154,11 +154,33 @@ def join():
     return jsonify(ok=True)
 
 
+def _resolve(c, d):
+    """Figure out which linked world a request means. Order of preference:
+      1. an explicit `ref` (the user's own local nickname), if it exists;
+      2. if the user has linked exactly ONE world, just use it (the common case
+         for the in-game panel, so the Ref field can stay empty);
+      3. otherwise match on the in-game `session` name the mod sent.
+    Returns the world dict, or None if it can't be determined."""
+    worlds = c["worlds"]
+    ref = (d.get("ref") or "").strip()
+    if ref and ref in worlds:
+        return worlds[ref]
+    if len(worlds) == 1:
+        return next(iter(worlds.values()))
+    sess = (d.get("session") or "").strip()
+    if sess:
+        for w in worlds.values():
+            if (w.get("session") or "") == sess:
+                return w
+    return None
+
+
 @app.post("/api/host")
 def host():
-    c = _cfg(); w = c["worlds"].get(request.get_json(force=True).get("ref"))
+    c = _cfg(); w = _resolve(c, request.get_json(force=True))
     if not w:
-        return _err("Unknown world.")
+        return _err("Couldn't tell which world to host — link a world first, "
+                    "or (if you have several) pass its name.")
     rw = remote.RemoteWorld(w["server"], w["code"])
     try:
         rw.claim(c.get("user") or "anon")
@@ -171,9 +193,10 @@ def host():
 
 @app.post("/api/finish")
 def finish():
-    c = _cfg(); w = c["worlds"].get(request.get_json(force=True).get("ref"))
+    c = _cfg(); w = _resolve(c, request.get_json(force=True))
     if not w:
-        return _err("Unknown world.")
+        return _err("Couldn't tell which world to finish — link a world first, "
+                    "or (if you have several) pass its name.")
     local = store.latest_local_save(w["local_dir"], w["session"])
     if not local:
         return _err(f"No '{w['session']}' save found in your SaveGames to upload.")
